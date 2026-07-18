@@ -49,3 +49,32 @@ jobs:
           python-version: "3.12"
       - run: uv sync --dev --extra modal
       - run: make test-e2e
+
+  evals:
+    # Merge gate on the harbor-mcp capability surface: claude-code drives the
+    # MCP against the hub for the read/write/registry evals on modal, and the
+    # runner (run_evals.sh) gates on reward 1.0. Self-contained -- it bootstraps
+    # its own hub job with the oracle and cleans it up. Uses Anthropic credits
+    # (unlike the oracle-based e2e job). Skips on fork PRs, which get no secrets.
+    runs-on: ubuntu-latest
+    env:
+      HARBOR_API_KEY: ${{ secrets.HARBOR_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      HARBOR_TEST_ENV: modal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev --extra modal
+      # run_evals.sh calls the bare `harbor` console script from the venv.
+      - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Run agentic evals
+        run: |
+          if [ -z "${HARBOR_API_KEY:-}" ]; then
+            echo "HARBOR_API_KEY absent (fork PR?); skipping evals."
+            exit 0
+          fi
+          make evals
